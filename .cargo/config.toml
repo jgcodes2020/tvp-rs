@@ -1,0 +1,5 @@
+[build]
+rustflags = [
+    "-C",
+    "target_feature=+avx2"
+]

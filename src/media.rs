@@ -1,7 +1,7 @@
 use std::{error::Error, ffi::CString, path::{Path, PathBuf}};
 
 use rsmpeg::{avcodec::{AVCodec, AVCodecContext}, avformat::AVFormatContextInput, avutil::{AVDictionary, AVFrame}, error::RsmpegError};
-use rusty_ffmpeg::ffi::{AVERROR_DECODER_NOT_FOUND, AVERROR_STREAM_NOT_FOUND};
+use rusty_ffmpeg::ffi::{AVERROR_DECODER_NOT_FOUND, AVERROR_STREAM_NOT_FOUND, AVRational};
 
 use crate::enums::AVMediaType;
 
@@ -37,10 +37,19 @@ impl VideoDecoder {
                     if packet.stream_index as usize != self.video_stream {continue}
                     // decode the next frame
                     self.video_decoder.send_packet(Some(&packet))?;
-                    return Ok(Some(self.video_decoder.receive_frame()?));
+                    match self.video_decoder.receive_frame() {
+                        Ok(frame) => return Ok(Some(frame)),
+                        Err(RsmpegError::DecoderDrainError) => (),
+                        Err(error) => return Err(error)
+                    }
                 }
             }
         }
+    }
+
+    pub fn time_base(&self) -> AVRational {
+        let stream = self.fmt_ctx.streams().get(self.video_stream).unwrap();
+        stream.time_base.clone()
     }
 }
 
@@ -52,6 +61,7 @@ fn open_codec_ctx(fmt_ctx: &AVFormatContextInput, media_type: AVMediaType) -> Re
     let (index, _) = fmt_ctx.find_best_stream(media_type.into())?.ok_or(RsmpegError::AVError(AVERROR_STREAM_NOT_FOUND))?;
 
     let stream = fmt_ctx.streams().get(index).expect("STREAMS FUCKED");
+    eprintln!("time base: {:?}", stream.time_base);
     let codec = AVCodec::find_decoder(stream.codecpar().codec_id).ok_or(RsmpegError::AVError(AVERROR_DECODER_NOT_FOUND))?;
 
     let mut codec_ctx = AVCodecContext::new(&codec);
