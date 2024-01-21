@@ -575,6 +575,7 @@ dependencies = [
  "crossterm",
  "rsmpeg",
  "rusty_ffmpeg",
+ "signal-hook",
 ]
 
 [[package]]

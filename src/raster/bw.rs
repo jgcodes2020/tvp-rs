@@ -3,9 +3,7 @@ use std::{
     arch::x86_64::*,
     array, cmp,
     error::Error,
-    fs::File,
     io::Write,
-    path::Path,
 };
 
 use rsmpeg::{avutil::AVFrame, error::RsmpegError};
@@ -17,32 +15,21 @@ use super::Raster;
 
 pub struct BWRaster {}
 
+
+static mut ENCODE_BUFFER: Vec<u8> = Vec::new();
+
 impl Raster for BWRaster {
+
     fn present<T: Write>(src: &AVFrame, dest: &mut T) -> Result<(), Box<dyn Error>> {
         let dithered = dither_frame(src)?;
-        // save_pgm(&dithered, Path::new("/dev/shm/blablablablabla-output.pgm"))?;
-        encode_sixel(&dithered, dest)?;
+        unsafe {
+            ENCODE_BUFFER.clear();
+            ENCODE_BUFFER.clear();
+            encode_sixel(&dithered, &mut ENCODE_BUFFER)?;
+            dest.write_all(ENCODE_BUFFER.as_slice())?;
+        }
         Ok(())
     }
-}
-
-// DITHERING
-
-#[allow(unused)]
-fn save_pgm(src: &AVFrame, dst: &Path) -> Result<(), Box<dyn Error>> {
-    let mut file = File::create(dst)?;
-
-    write!(&mut file, "P5 {} {} 255\n", src.width, src.height)?;
-    unsafe {
-        for i in 0..src.height {
-            file.write(slice::from_raw_parts(
-                src.data[0].add((src.linesize[0] * i) as usize),
-                src.width as usize,
-            ))?;
-        }
-    }
-
-    Ok(())
 }
 
 fn dither_frame(src: &AVFrame) -> Result<AVFrame, RsmpegError> {
@@ -74,12 +61,12 @@ fn dither_frame(src: &AVFrame) -> Result<AVFrame, RsmpegError> {
 
     Ok(dst)
 }
-
+// [['18', '80', '32', '9A'], ['B4', '4C', 'CE', '66'], ['3F', 'A7', '25', '8D'], ['DB', '73', 'C1', '59']]
 const DITHER_MATRIX: [u32; 4] = [
-    0xA8_28_88_08u32,
-    0x68_E8_48_C8u32,
-    0x98_18_B8_38u32,
-    0x58_D8_78_F8u32,
+    0x18_80_32_9Au32,
+    0x66_CE_4C_B4u32,
+    0x8D_25_A7_3Fu32,
+    0xDB_73_C1_59u32,
 ];
 // 0x00, 0x80, 0x20, 0xA0,
 // 0xC0, 0x40, 0xE0, 0x60,
@@ -103,7 +90,7 @@ unsafe fn dither_line(src_line: &[u8], dst_line: &mut [u8], row_index: usize) {
         let mut chunk = _mm256_loadu_si256(src_ptr as *const __m256i);
         chunk = {
             let thresh = _mm256_set1_epi32(DITHER_MATRIX[row_index % 4] as i32);
-            _mm256_cmpeq_epi8(_mm256_max_epu8(chunk, thresh), thresh)
+            _mm256_cmpeq_epi8(_mm256_max_epu8(thresh, chunk), chunk)
         };
         _mm256_storeu_si256(dst_ptr as *mut __m256i, chunk);
 
@@ -116,7 +103,7 @@ unsafe fn dither_line(src_line: &[u8], dst_line: &mut [u8], row_index: usize) {
 
 fn encode_sixel<T: Write>(src: &AVFrame, dest: &mut T) -> Result<(), Box<dyn Error>> {
     // sixel header
-    dest.write(b"\x1BPq#0;2;0;0;0#1;2;100;100;100#1")?;
+    dest.write_all(b"\x1BPq#0;2;0;0;0#1;2;100;100;100#1")?;
 
     // rows
     unsafe {
@@ -133,12 +120,12 @@ fn encode_sixel<T: Write>(src: &AVFrame, dest: &mut T) -> Result<(), Box<dyn Err
             });
             encode_sixel_row(&lines, dest)?;
             // row termintor
-            dest.write(b"-")?;
+            dest.write_all(b"-")?;
         }
     }
 
     // sixel footer
-    dest.write(b"\x1B\\")?;
+    dest.write_all(b"\x1B\\")?;
     dest.flush()?;
     Ok(())
 }
@@ -163,7 +150,7 @@ unsafe fn encode_sixel_row<T: Write>(
         if run_len == 0 {
         } else if run_len <= 3 {
             let data: [u8; 3] = [edge.1; 3];
-            dest.write(&data[0..run_len])?;
+            dest.write_all(&data[0..run_len])?;
         } else {
             write!(dest, "!{}{}", run_len, edge.1 as char)?;
         }
@@ -202,7 +189,7 @@ unsafe fn encode_sixel_row<T: Write>(
             _mm256_alignr_epi8::<15>(chunk, align_out)
         };
         // get the shifted out carry byte
-        carry = _mm256_extract_epi8::<31>(chunk) as u8;
+        carry = chunk_arr[31];
         // compare shifted with not shifted; generating a bitmask of edges
         let mut edge_mask = !_mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, shifted)) as u32;
         // iterate over all found edges

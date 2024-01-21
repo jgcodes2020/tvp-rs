@@ -12,3 +12,4 @@ rusty_ffmpeg = { version = "*", features = ["link_system_ffmpeg"] }
 rsmpeg = "0.14.2"
 clap = { version = "4.0", features = ["derive"] }
 crossterm = "0.27.0"
+signal-hook = "0.3.17"
