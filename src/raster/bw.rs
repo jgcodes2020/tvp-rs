@@ -5,9 +5,7 @@ use std::{
     error::Error,
     fs::File,
     io::Write,
-    mem::{self, MaybeUninit},
     path::Path,
-    ptr::null,
 };
 
 use rsmpeg::{avutil::AVFrame, error::RsmpegError};

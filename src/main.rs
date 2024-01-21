@@ -1,20 +1,19 @@
-use core::{slice, time};
-use std::io::{IsTerminal, Read, Write};
+
+use std::io::{IsTerminal, Write};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use std::{error::Error, fs, io, path::Path};
 
 use clap::Parser;
-use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::execute;
+use crossterm::terminal::{self};
+
 use media::VideoDecoder;
 use raster::BWRaster;
 use raster::Raster;
-use rsmpeg::avutil::av_mul_q;
-use rusty_ffmpeg::ffi::av_cmp_q;
+
+
 
 mod cli;
-mod enums;
 mod media;
 mod raster;
 

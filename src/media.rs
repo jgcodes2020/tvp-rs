@@ -1,9 +1,7 @@
-use std::{error::Error, ffi::CString, path::{Path, PathBuf}};
+use std::{ffi::CString, path::{Path}};
 
 use rsmpeg::{avcodec::{AVCodec, AVCodecContext}, avformat::AVFormatContextInput, avutil::{AVDictionary, AVFrame}, error::RsmpegError};
-use rusty_ffmpeg::ffi::{AVERROR_DECODER_NOT_FOUND, AVERROR_STREAM_NOT_FOUND, AVRational};
-
-use crate::enums::AVMediaType;
+use rusty_ffmpeg::ffi::{AVMediaType, AVRational, AVERROR_DECODER_NOT_FOUND, AVERROR_STREAM_NOT_FOUND};
 
 pub struct VideoDecoder {
     fmt_ctx: AVFormatContextInput,
@@ -20,7 +18,7 @@ impl VideoDecoder {
         let mut options: Option<AVDictionary> = None;
         let fmt_ctx = AVFormatContextInput::open(path_to_cstring(path).as_c_str(), None, &mut options)?;
 
-        let (video_stream, video_decoder) = open_codec_ctx(&fmt_ctx, AVMediaType::VIDEO)?;
+        let (video_stream, video_decoder) = open_codec_ctx(&fmt_ctx, rusty_ffmpeg::ffi::AVMediaType_AVMEDIA_TYPE_VIDEO)?;
 
         Ok(VideoDecoder {
             fmt_ctx, video_stream, video_decoder
@@ -58,7 +56,7 @@ fn path_to_cstring(path: &Path) -> CString {
 }
 
 fn open_codec_ctx(fmt_ctx: &AVFormatContextInput, media_type: AVMediaType) -> Result<(usize, AVCodecContext), RsmpegError> {
-    let (index, _) = fmt_ctx.find_best_stream(media_type.into())?.ok_or(RsmpegError::AVError(AVERROR_STREAM_NOT_FOUND))?;
+    let (index, _) = fmt_ctx.find_best_stream(media_type)?.ok_or(RsmpegError::AVError(AVERROR_STREAM_NOT_FOUND))?;
 
     let stream = fmt_ctx.streams().get(index).expect("STREAMS FUCKED");
     eprintln!("time base: {:?}", stream.time_base);
